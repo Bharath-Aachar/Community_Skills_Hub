@@ -1,5 +1,5 @@
 -- ==============================================================================
--- Community Skills Hub — Profiles and Role Architecture Migration (Hardened)
+-- Community Skills Hub — Profiles and Role Architecture Migration (Final)
 -- Stage 2, Task 2
 -- ==============================================================================
 
@@ -42,9 +42,11 @@ CREATE TRIGGER on_profile_updated_at
 -- Multi-vector authorization check:
 -- - Checks Supabase JWT claims (auth.jwt() ->> 'role')
 -- - Checks PostgREST request context (current_setting('request.jwt.claim.role'))
--- - Checks PostgreSQL session user (current_user)
+-- - Checks original session initiator (session_user) rather than current_user,
+--   ensuring that SECURITY DEFINER ownership does not unintentionally authorize changes.
 -- Normal authenticated users or client requests can NEVER modify `roles`.
--- Only trusted server-side admin processes using the service-role key or database admins can modify `roles`.
+-- Only trusted server-side admin processes using the service-role key or direct
+-- database administrator sessions (session_user) can modify `roles`.
 CREATE OR REPLACE FUNCTION public.protect_profile_roles()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -69,10 +71,11 @@ BEGIN
     jwt_role := NULL;
   END;
 
-  -- Strictly verify whether the modifier is a trusted service_role or database admin
+  -- Strictly verify whether the original caller is a trusted service_role request
+  -- or a direct database administrator session (using session_user, not current_user)
   IF (
     jwt_role = 'service_role'
-    OR current_user IN ('service_role', 'postgres', 'supabase_admin')
+    OR session_user IN ('postgres', 'supabase_admin')
   ) THEN
     RETURN NEW;
   ELSE
@@ -139,18 +142,16 @@ CREATE POLICY "Users can read own profile"
   TO authenticated
   USING (auth.uid() = id);
 
--- Policy 2: Authenticated users can update their own permitted profile data (e.g. full_name)
--- Secondary RLS barrier: WITH CHECK ensures the updated row's roles cannot differ from existing row
+-- Policy 2: Authenticated users can update their own permitted profile data
+-- Uses auth.uid() = id for USING and WITH CHECK to prevent recursive queries.
+-- Protection of the roles column is enforced by column-level grants and the on_profile_role_update trigger.
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile"
   ON public.profiles
   FOR UPDATE
   TO authenticated
   USING (auth.uid() = id)
-  WITH CHECK (
-    auth.uid() = id
-    AND roles = (SELECT p.roles FROM public.profiles p WHERE p.id = profiles.id)
-  );
+  WITH CHECK (auth.uid() = id);
 
 -- 7. Column-Level Grants (Defense-in-Depth)
 -- Revoke all direct permissions from public / anon
@@ -160,8 +161,9 @@ REVOKE ALL ON public.profiles FROM authenticated;
 -- Grant authenticated users SELECT on the table
 GRANT SELECT ON public.profiles TO authenticated;
 
--- Grant authenticated users UPDATE ONLY on permitted user columns (roles is strictly excluded)
-GRANT UPDATE (full_name, updated_at) ON public.profiles TO authenticated;
+-- Grant authenticated users UPDATE ONLY on full_name.
+-- (updated_at is updated by the database trigger, and roles cannot be modified by users)
+GRANT UPDATE (full_name) ON public.profiles TO authenticated;
 
 -- Grant full table access to service_role for server-side admin management
 GRANT ALL ON public.profiles TO service_role;
