@@ -11,6 +11,7 @@ interface PlaceholderPageProps {
   icon: LucideIcon;
   targetRole?: string;
   expectedFeatures?: string[];
+  secondaryAction?: React.ReactNode;
 }
 
 export default function PlaceholderPage({
@@ -21,6 +22,7 @@ export default function PlaceholderPage({
   icon: Icon,
   targetRole,
   expectedFeatures = [],
+  secondaryAction,
 }: PlaceholderPageProps) {
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF8FE]">
@@ -53,7 +55,9 @@ export default function PlaceholderPage({
           {expectedFeatures.length > 0 && (
             <div className="mt-6 pt-6 border-t border-purple-50 text-left">
               <p className="text-xs font-bold uppercase tracking-wider text-[#242136] mb-3">
-                {targetRole ? `Upcoming Features for ${targetRole}:` : "Upcoming Capabilities:"}
+                {targetRole
+                  ? `Upcoming Features for ${targetRole}:`
+                  : "Upcoming Capabilities:"}
               </p>
               <ul className="space-y-2 text-xs sm:text-sm text-[#4E4A67]">
                 {expectedFeatures.map((feat, idx) => (
@@ -66,15 +70,17 @@ export default function PlaceholderPage({
             </div>
           )}
 
-          {/* Back Action */}
-          <div className="mt-8 pt-6 border-t border-purple-50">
+          {/* Action Buttons */}
+          <div className="mt-8 pt-6 border-t border-purple-50 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link
               href="/"
-              className="inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-[#7543DF] hover:bg-[#6332C9] rounded-xl shadow-sm hover:shadow transition-all duration-200"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-[#7543DF] hover:bg-[#6332C9] rounded-xl shadow-sm hover:shadow transition-all duration-200"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to Welcome Page</span>
             </Link>
+
+            {secondaryAction}
           </div>
         </div>
       </main>
