@@ -1,5 +1,5 @@
 -- ==============================================================================
--- Community Skills Hub — Events Schema & Access Control Migration (Corrected)
+-- Community Skills Hub — Events Schema & Access Control Migration (Final)
 -- Stage 3, Task 1
 -- ==============================================================================
 
@@ -37,7 +37,11 @@ AS $$
   );
 $$;
 
--- Grant execution to authenticated and service_role
+-- Revoke default PUBLIC and anon execution privileges on helper functions
+REVOKE EXECUTE ON FUNCTION public.is_organizer_or_admin() FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.is_admin() FROM PUBLIC, anon;
+
+-- Explicitly grant execution to authenticated and service_role
 GRANT EXECUTE ON FUNCTION public.is_organizer_or_admin() TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, service_role;
 
@@ -94,31 +98,31 @@ CREATE INDEX IF NOT EXISTS idx_events_type
   ON public.events (event_type);
 
 -- 4. Triggers: updated_at and published_at automation
--- Handles both INSERT and UPDATE:
--- - Sets updated_at on updates
 -- - On INSERT with status = 'published', sets published_at to now()
--- - On UPDATE transitioning to published, sets published_at to now()
--- - On UPDATE of an already published event, preserves original published_at
+-- - On UPDATE transitioning from any other status to published, sets published_at to now()
+-- - On UPDATE while remaining published, preserves OLD.published_at
+-- - On every UPDATE, updates updated_at to now()
 CREATE OR REPLACE FUNCTION public.handle_event_timestamps()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF TG_OP = 'UPDATE' THEN
-    NEW.updated_at = now();
-
-    -- Transitioning from another status (or unpopulated timestamp) to published
-    IF NEW.status = 'published' AND (OLD.status IS DISTINCT FROM 'published' OR OLD.published_at IS NULL) THEN
-      NEW.published_at = COALESCE(OLD.published_at, now());
-    -- Already published event being edited: preserve original publication timestamp
-    ELSIF NEW.status = 'published' AND OLD.published_at IS NOT NULL THEN
-      NEW.published_at = OLD.published_at;
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status = 'published' THEN
+      NEW.published_at = now();
+    ELSE
+      NEW.published_at = NULL;
     END IF;
 
-  ELSIF TG_OP = 'INSERT' THEN
-    -- Direct insert with published status
-    IF NEW.status = 'published' THEN
-      NEW.published_at = COALESCE(NEW.published_at, now());
+  ELSIF TG_OP = 'UPDATE' THEN
+    NEW.updated_at = now();
+
+    -- Transitioning from any other status to published
+    IF NEW.status = 'published' AND OLD.status IS DISTINCT FROM 'published' THEN
+      NEW.published_at = now();
+    -- Remaining published: preserve original publication timestamp
+    ELSIF NEW.status = 'published' AND OLD.status = 'published' THEN
+      NEW.published_at = OLD.published_at;
     END IF;
   END IF;
 
@@ -137,9 +141,11 @@ ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 
 -- 6. RLS Policies
 
--- Policy 1: SELECT (Public Discovery + Organizer Workspace)
--- Published events are discoverable by everyone (anon, participants, organizers).
--- Draft, completed, or cancelled events are visible only to the event's organizer or an admin.
+-- Policy 1: SELECT (Public Discovery + Active Organizer Workspace)
+-- - Everyone can view published events.
+-- - An active organizer can view their own events (including drafts).
+-- - An admin can view all events.
+-- - Participants and organizers whose role has been revoked cannot view unpublished events belonging to others.
 DROP POLICY IF EXISTS "Events are viewable by public if published or by owner" ON public.events;
 CREATE POLICY "Events are viewable by public if published or by owner"
   ON public.events
@@ -149,11 +155,17 @@ CREATE POLICY "Events are viewable by public if published or by owner"
     status = 'published'
     OR (
       auth.uid() IS NOT NULL
-      AND (organizer_id = auth.uid() OR public.is_admin())
+      AND (
+        public.is_admin()
+        OR (
+          organizer_id = auth.uid()
+          AND public.is_organizer_or_admin()
+        )
+      )
     )
   );
 
--- Policy 2: INSERT (Organizers and Admins only)
+-- Policy 2: INSERT (Active Organizers and Admins only)
 -- Only users who currently hold the 'organizer' or 'admin' role in profiles.roles can create events.
 -- The organizer_id must match auth.uid() unless created by an admin.
 DROP POLICY IF EXISTS "Organizers and admins can create events" ON public.events;
@@ -166,7 +178,7 @@ CREATE POLICY "Organizers and admins can create events"
     AND (organizer_id = auth.uid() OR public.is_admin())
   );
 
--- Policy 3: UPDATE (Event Organizer and Admins only)
+-- Policy 3: UPDATE (Active Event Organizer and Admins only)
 -- An organizer can update only their own events while they currently hold the organizer role.
 -- Admins can update any event.
 -- Organizers cannot reassign the event to another organizer.
