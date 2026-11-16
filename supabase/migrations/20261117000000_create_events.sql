@@ -141,31 +141,35 @@ ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 
 -- 6. RLS Policies
 
--- Policy 1: SELECT (Public Discovery + Active Organizer Workspace)
--- - Everyone can view published events.
--- - An active organizer can view their own events (including drafts).
--- - An admin can view all events.
--- - Participants and organizers whose role has been revoked cannot view unpublished events belonging to others.
+-- Policy 1: SELECT (Public Discovery of Published Events)
+-- Applies to anon and authenticated users.
+-- Evaluates without calling any helper functions, ensuring seamless discovery for unauthenticated visitors.
 DROP POLICY IF EXISTS "Events are viewable by public if published or by owner" ON public.events;
-CREATE POLICY "Events are viewable by public if published or by owner"
+DROP POLICY IF EXISTS "Anyone can view published events" ON public.events;
+CREATE POLICY "Anyone can view published events"
   ON public.events
   FOR SELECT
-  TO public
+  TO anon, authenticated
+  USING (status = 'published');
+
+-- Policy 2: SELECT (Private / Draft Events for Organizers and Admins)
+-- Applies strictly to authenticated users.
+-- Admins can view all events across all statuses.
+-- Active organizers can view their own private, draft, cancelled, or completed events.
+DROP POLICY IF EXISTS "Organizers and admins can view private events" ON public.events;
+CREATE POLICY "Organizers and admins can view private events"
+  ON public.events
+  FOR SELECT
+  TO authenticated
   USING (
-    status = 'published'
+    public.is_admin()
     OR (
-      auth.uid() IS NOT NULL
-      AND (
-        public.is_admin()
-        OR (
-          organizer_id = auth.uid()
-          AND public.is_organizer_or_admin()
-        )
-      )
+      organizer_id = auth.uid()
+      AND public.is_organizer_or_admin()
     )
   );
 
--- Policy 2: INSERT (Active Organizers and Admins only)
+-- Policy 3: INSERT (Active Organizers and Admins only)
 -- Only users who currently hold the 'organizer' or 'admin' role in profiles.roles can create events.
 -- The organizer_id must match auth.uid() unless created by an admin.
 DROP POLICY IF EXISTS "Organizers and admins can create events" ON public.events;
@@ -178,7 +182,7 @@ CREATE POLICY "Organizers and admins can create events"
     AND (organizer_id = auth.uid() OR public.is_admin())
   );
 
--- Policy 3: UPDATE (Active Event Organizer and Admins only)
+-- Policy 4: UPDATE (Active Event Organizer and Admins only)
 -- An organizer can update only their own events while they currently hold the organizer role.
 -- Admins can update any event.
 -- Organizers cannot reassign the event to another organizer.
@@ -202,7 +206,7 @@ CREATE POLICY "Organizers and admins can update events"
     )
   );
 
--- Policy 4: DELETE (Active Event Organizer and Admins only)
+-- Policy 5: DELETE (Active Event Organizer and Admins only)
 -- An organizer can delete only their own events while they currently hold the organizer role.
 -- An admin can delete any event.
 -- Standard participants (or users whose organizer role has been revoked) cannot delete events.
@@ -223,11 +227,11 @@ CREATE POLICY "Organizers and admins can delete events"
 REVOKE ALL ON public.events FROM anon;
 REVOKE ALL ON public.events FROM authenticated;
 
--- Public can read (gated by RLS Policy 1)
+-- Public can read (gated by RLS Policies 1 & 2)
 GRANT SELECT ON public.events TO anon;
 GRANT SELECT ON public.events TO authenticated;
 
--- Authenticated organizers/admins can mutate (gated by RLS Policies 2, 3, 4)
+-- Authenticated organizers/admins can mutate (gated by RLS Policies 3, 4, 5)
 GRANT INSERT, UPDATE, DELETE ON public.events TO authenticated;
 
 -- Service role retains full administrative access
