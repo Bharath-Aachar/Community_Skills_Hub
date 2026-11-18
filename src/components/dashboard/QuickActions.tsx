@@ -1,3 +1,6 @@
+"use client";
+
+import { useRouter } from "next/navigation";
 import { Plus, ListFilter, FileEdit, Users, ArrowUpRight } from "lucide-react";
 import { ModalType } from "./PlaceholderModal";
 
@@ -10,15 +13,17 @@ export default function QuickActions({
   onOpenModal,
   onFilterChange,
 }: QuickActionsProps) {
+  const router = useRouter();
+
   const actions = [
     {
       title: "Create an Event",
       description: "Launch a new workshop or community meetup",
       icon: <Plus className="w-5 h-5 text-white" />,
       iconBg: "bg-[#7543DF]",
-      badge: "Stage 3",
+      badge: "Studio",
       badgeColor: "bg-purple-100 text-[#7543DF]",
-      action: () => onOpenModal("create"),
+      action: () => router.push("/admin/events/create"),
       isPrimary: true,
     },
     {

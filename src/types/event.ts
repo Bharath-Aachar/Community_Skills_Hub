@@ -24,6 +24,8 @@ export interface Event {
   registration_url: string | null;
   capacity: number | null;
   status: EventStatus;
+  image_path?: string | null;
+  image_url?: string | null;
   created_at: string;
   updated_at: string;
   published_at: string | null;
@@ -57,6 +59,7 @@ export interface CreateEventInput {
   registration_url?: string | null;
   capacity?: number | null;
   status?: EventStatus;
+  image_path?: string | null;
 }
 
 /**
@@ -75,6 +78,7 @@ export interface UpdateEventInput {
   registration_url?: string | null;
   capacity?: number | null;
   status?: EventStatus;
+  image_path?: string | null;
 }
 
 /**

@@ -12,6 +12,10 @@ import {
   validateCreateEventInput,
   validateUpdateEventInput,
 } from "./validation";
+import {
+  enrichEventWithImageUrl,
+  deletePosterFromStorage,
+} from "./storage";
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -77,6 +81,7 @@ export async function createEvent(
       registration_url: input.registration_url?.trim() || null,
       capacity: input.capacity ?? null,
       status: input.status || "draft",
+      image_path: input.image_path?.trim() || null,
     };
 
     // 4. Insert row (RLS policy enforces organizer/admin role and ownership)
@@ -108,7 +113,7 @@ export async function createEvent(
     }
 
     return {
-      data: data as Event,
+      data: enrichEventWithImageUrl(data as Event),
       error: null,
     };
   } catch (err) {
@@ -224,7 +229,7 @@ export async function getPublishedEvents(
     }
 
     const eventsWithOrganizer: EventWithOrganizer[] = eventsList.map((e) => ({
-      ...e,
+      ...enrichEventWithImageUrl(e),
       organizer: organizerMap.get(e.organizer_id) ?? null,
     }));
 
@@ -303,7 +308,7 @@ export async function getOrganizerEvents(
     }
 
     return {
-      data: (data || []) as Event[],
+      data: ((data || []) as Event[]).map((e) => enrichEventWithImageUrl(e)),
       error: null,
     };
   } catch (err) {
@@ -391,7 +396,7 @@ export async function getEventById(
 
     return {
       data: {
-        ...event,
+        ...enrichEventWithImageUrl(event),
         organizer,
       },
       error: null,
@@ -464,6 +469,8 @@ export async function updateEvent(
     updatePayload.registration_url = input.registration_url?.trim() || null;
   if (input.capacity !== undefined) updatePayload.capacity = input.capacity;
   if (input.status !== undefined) updatePayload.status = input.status;
+  if (input.image_path !== undefined)
+    updatePayload.image_path = input.image_path?.trim() || null;
 
   if (Object.keys(updatePayload).length === 0) {
     return {
@@ -492,6 +499,17 @@ export async function updateEvent(
           code: "UNAUTHORIZED",
         },
       };
+    }
+
+    // Check existing image path if updating poster to clean up replaced file
+    let previousImagePath: string | null = null;
+    if (input.image_path !== undefined) {
+      const { data: existingEvent } = await supabase
+        .from("events")
+        .select("image_path")
+        .eq("id", id.trim())
+        .maybeSingle();
+      previousImagePath = existingEvent?.image_path || null;
     }
 
     const { data, error } = await supabase
@@ -526,8 +544,16 @@ export async function updateEvent(
       };
     }
 
+    // Clean up replaced poster file if new path is different
+    if (
+      previousImagePath &&
+      previousImagePath !== (updatePayload.image_path ?? null)
+    ) {
+      await deletePosterFromStorage(supabase, previousImagePath);
+    }
+
     return {
-      data: data as Event,
+      data: enrichEventWithImageUrl(data as Event),
       error: null,
     };
   } catch (err) {
@@ -582,6 +608,13 @@ export async function deleteEvent(
       };
     }
 
+    // Query event first to retrieve image_path for storage cleanup
+    const { data: eventToDelete } = await supabase
+      .from("events")
+      .select("image_path")
+      .eq("id", id.trim())
+      .maybeSingle();
+
     const { error, count } = await supabase
       .from("events")
       .delete({ count: "exact" })
@@ -610,6 +643,11 @@ export async function deleteEvent(
           code: "NOT_FOUND_OR_FORBIDDEN",
         },
       };
+    }
+
+    // If deletion succeeded and event had a poster, clean it up from storage
+    if (eventToDelete?.image_path) {
+      await deletePosterFromStorage(supabase, eventToDelete.image_path);
     }
 
     return {

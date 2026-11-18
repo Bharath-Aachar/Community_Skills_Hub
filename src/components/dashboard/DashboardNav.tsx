@@ -75,14 +75,13 @@ export default function DashboardNav({
             <span>My Events</span>
           </a>
 
-          <button
-            type="button"
-            onClick={() => onOpenModal("create")}
+          <Link
+            href="/admin/events/create"
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold text-[#242136] hover:text-[#7543DF] hover:bg-white/70 transition-all"
           >
             <Plus className="w-3.5 h-3.5 text-[#7543DF]" />
             <span>Create Event</span>
-          </button>
+          </Link>
 
           <button
             type="button"
@@ -178,17 +177,14 @@ export default function DashboardNav({
               <CalendarDays className="w-4 h-4" />
               <span>My Events</span>
             </a>
-            <button
-              type="button"
-              onClick={() => {
-                setMobileMenuOpen(false);
-                onOpenModal("create");
-              }}
+            <Link
+              href="/admin/events/create"
+              onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-2 p-2.5 rounded-xl text-xs font-semibold text-[#242136] hover:bg-[#F4F0FF] text-left"
             >
               <Plus className="w-4 h-4 text-[#7543DF]" />
               <span>Create Event</span>
-            </button>
+            </Link>
             <button
               type="button"
               onClick={() => {

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Sparkles,
   Plus,
@@ -11,16 +12,12 @@ import {
   Laptop,
   Flame,
 } from "lucide-react";
-import { ModalType } from "./PlaceholderModal";
-
 interface DashboardHeroProps {
   userName: string;
-  onOpenModal: (type: ModalType) => void;
 }
 
 export default function DashboardHero({
   userName,
-  onOpenModal,
 }: DashboardHeroProps) {
   // Use first name or fallback to "Organizer"
   const firstName = userName ? userName.split(" ")[0] : "Organizer";
@@ -71,16 +68,15 @@ export default function DashboardHero({
 
             {/* Action Buttons */}
             <div className="pt-2 flex flex-wrap items-center gap-3.5">
-              <button
-                type="button"
-                onClick={() => onOpenModal("create")}
+              <Link
+                href="/admin/events/create"
                 className="group inline-flex items-center gap-2.5 px-6 py-3 rounded-full text-sm font-bold text-[#302063] bg-white hover:bg-purple-50 transition-all duration-200 active:scale-95 shadow-lg shadow-black/10 hover:shadow-xl"
               >
                 <div className="w-6 h-6 rounded-full bg-[#7543DF] text-white flex items-center justify-center group-hover:rotate-90 transition-transform duration-300">
                   <Plus className="w-3.5 h-3.5 stroke-[3]" />
                 </div>
                 <span>Create an Event</span>
-              </button>
+              </Link>
 
               <a
                 href="#my-events"

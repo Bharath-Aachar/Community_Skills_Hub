@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
+import Image from "next/image";
 import { Event, EventStatus } from "@/types/event";
 import {
   Calendar,
@@ -14,23 +16,26 @@ import {
   Sparkles,
   Ticket,
   Users,
+  ExternalLink,
+  Eye,
 } from "lucide-react";
 import { ModalType } from "./PlaceholderModal";
+import EventDetailsModal from "./EventDetailsModal";
 
 interface RecentEventsProps {
   events: Event[];
-  onOpenModal: (type: ModalType, eventTitle?: string) => void;
+  onOpenModal?: (type: ModalType, eventTitle?: string) => void;
   activeFilter?: string;
   onFilterChange?: (status: "all" | "published" | "draft" | "completed") => void;
 }
 
 export default function RecentEvents({
   events,
-  onOpenModal,
   activeFilter = "all",
   onFilterChange,
 }: RecentEventsProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedEventForDetails, setSelectedEventForDetails] = useState<Event | null>(null);
 
   // Filter events based on active tab and search query
   const filteredEvents = useMemo(() => {
@@ -176,14 +181,13 @@ export default function RecentEvents({
           </div>
 
           {/* New Event Button */}
-          <button
-            type="button"
-            onClick={() => onOpenModal("create")}
+          <Link
+            href="/admin/events/create"
             className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold text-white bg-[#7543DF] hover:bg-[#6332C9] transition-all shadow-xs active:scale-95"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>New Event</span>
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -215,23 +219,53 @@ export default function RecentEvents({
 
       {/* Events List */}
       {filteredEvents.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredEvents.map((event) => (
             <div
               key={event.id}
-              className="group bg-white rounded-3xl border border-purple-100/90 p-5 sm:p-6 shadow-sm hover:shadow-xl hover:shadow-purple-950/5 hover:border-[#7543DF]/40 transition-all duration-200 flex flex-col justify-between"
+              className="group bg-white rounded-3xl border border-purple-100/90 p-5 shadow-sm hover:shadow-xl hover:shadow-purple-950/5 hover:border-[#7543DF]/40 transition-all duration-200 flex flex-col justify-between"
             >
               <div>
-                {/* Category & Status Bar */}
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#F4F0FF] text-[#7543DF] border border-purple-100">
-                    {event.category}
-                  </span>
-                  {renderStatusBadge(event.status)}
+                {/* 1. Event Poster Banner */}
+                <div
+                  onClick={() => setSelectedEventForDetails(event)}
+                  className="relative aspect-video w-full rounded-2xl overflow-hidden mb-4 bg-purple-50 border border-purple-100/60 cursor-pointer group/poster"
+                >
+                  {event.image_url ? (
+                    <Image
+                      src={event.image_url}
+                      alt={event.title}
+                      fill
+                      unoptimized
+                      className="object-cover transition-transform duration-300 group-hover/poster:scale-105"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-[#F4F0FF] via-[#FAF8FE] to-purple-100/40 flex flex-col items-center justify-center p-4 text-center">
+                      <div className="w-10 h-10 rounded-xl bg-white shadow-xs text-[#7543DF] flex items-center justify-center mb-1.5">
+                        <Calendar className="w-5 h-5" />
+                      </div>
+                      <span className="text-[11px] font-semibold text-[#64607D]">
+                        No poster uploaded
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Overlaid Badges */}
+                  <div className="absolute top-2.5 left-2.5 z-10">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/95 backdrop-blur-xs text-[#7543DF] border border-purple-100 shadow-xs">
+                      {event.category}
+                    </span>
+                  </div>
+                  <div className="absolute top-2.5 right-2.5 z-10">
+                    {renderStatusBadge(event.status)}
+                  </div>
                 </div>
 
                 {/* Event Title */}
-                <h3 className="text-base sm:text-lg font-bold text-[#242136] group-hover:text-[#7543DF] transition-colors leading-snug mb-2 line-clamp-2">
+                <h3
+                  onClick={() => setSelectedEventForDetails(event)}
+                  className="text-base sm:text-lg font-bold text-[#242136] group-hover:text-[#7543DF] transition-colors leading-snug mb-2 line-clamp-2 cursor-pointer"
+                >
                   {event.title}
                 </h3>
 
@@ -257,7 +291,7 @@ export default function RecentEvents({
                     {renderEventType(event.event_type, event.location)}
                   </div>
 
-                  {/* Capacity & Registration */}
+                  {/* Capacity & Registration Pills */}
                   <div className="flex items-center gap-4 text-[11px] text-[#64607D] pt-1">
                     {event.capacity && (
                       <span className="inline-flex items-center gap-1">
@@ -271,22 +305,55 @@ export default function RecentEvents({
                     </span>
                   </div>
                 </div>
+
+                {/* Dedicated Registration Action Strip */}
+                <div className="pt-3 pb-1">
+                  {event.registration_type === "external" && event.registration_url ? (
+                    <a
+                      href={event.registration_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl text-xs font-bold text-white bg-[#7543DF] hover:bg-[#6332C9] transition-all shadow-xs active:scale-[0.98]"
+                    >
+                      <span>Register Now</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  ) : event.registration_type === "external" ? (
+                    <div className="w-full py-2 px-3 rounded-xl text-xs text-center font-medium bg-[#FAF8FE] text-[#64607D] border border-purple-100">
+                      External Link Pending
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between w-full py-1.5 px-3 rounded-xl text-xs font-semibold bg-[#F4F0FF] text-[#7543DF] border border-purple-100">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-[#7543DF]" />
+                        <span>Community RSVP</span>
+                      </span>
+                      <span className="text-[11px] font-medium text-[#64607D]">
+                        {event.capacity ? `${event.capacity} seats max` : "Open registration"}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Card Footer: Edit Action Button */}
-              <div className="mt-4 pt-3 border-t border-purple-50 flex items-center justify-between">
-                <span className="text-[10px] text-[#64607D]">
-                  Updated {new Date(event.updated_at).toLocaleDateString()}
-                </span>
-
+              {/* Card Footer: View Details & Direct Edit Action */}
+              <div className="mt-4 pt-3 border-t border-purple-50 flex items-center justify-between gap-2">
                 <button
                   type="button"
-                  onClick={() => onOpenModal("edit", event.title)}
+                  onClick={() => setSelectedEventForDetails(event)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#64607D] hover:text-[#7543DF] transition-colors"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>View Details</span>
+                </button>
+
+                <Link
+                  href={`/admin/events/${event.id}/edit`}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-[#7543DF] bg-[#F4F0FF] hover:bg-[#7543DF] hover:text-white transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7543DF]"
                 >
                   <Pencil className="w-3 h-3" />
                   <span>Edit Event</span>
-                </button>
+                </Link>
               </div>
             </div>
           ))}
@@ -318,14 +385,13 @@ export default function RecentEvents({
               </p>
 
               <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => onOpenModal("create")}
+                <Link
+                  href="/admin/events/create"
                   className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-bold text-white bg-[#7543DF] hover:bg-[#6332C9] transition-all shadow-md shadow-[#7543DF]/20 active:scale-95"
                 >
                   <Plus className="w-4 h-4 stroke-[3]" />
                   <span>Create Your First Event</span>
-                </button>
+                </Link>
               </div>
             </div>
           ) : (
@@ -356,6 +422,13 @@ export default function RecentEvents({
           )}
         </div>
       )}
+
+      {/* Event Details Modal */}
+      <EventDetailsModal
+        event={selectedEventForDetails}
+        isOpen={selectedEventForDetails !== null}
+        onClose={() => setSelectedEventForDetails(null)}
+      />
     </section>
   );
 }

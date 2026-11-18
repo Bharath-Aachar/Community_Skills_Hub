@@ -128,6 +128,13 @@ export function validateCreateEventInput(input: CreateEventInput): ValidationRes
     fieldErrors.status = "Status must be 'draft', 'published', 'completed', or 'cancelled'.";
   }
 
+  // 9. Image path validation
+  if (input.image_path !== undefined && input.image_path !== null) {
+    if (typeof input.image_path !== "string" || input.image_path.trim().length > 500) {
+      fieldErrors.image_path = "Image path must not exceed 500 characters.";
+    }
+  }
+
   const isValid = Object.keys(fieldErrors).length === 0;
 
   return {
@@ -209,6 +216,12 @@ export function validateUpdateEventInput(input: UpdateEventInput): ValidationRes
 
   if (input.status !== undefined && !VALID_STATUSES.includes(input.status)) {
     fieldErrors.status = "Status must be 'draft', 'published', 'completed', or 'cancelled'.";
+  }
+
+  if (input.image_path !== undefined && input.image_path !== null) {
+    if (typeof input.image_path !== "string" || input.image_path.trim().length > 500) {
+      fieldErrors.image_path = "Image path must not exceed 500 characters.";
+    }
   }
 
   const isValid = Object.keys(fieldErrors).length === 0;
